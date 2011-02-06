@@ -1,0 +1,20 @@
+<popup name="button3">
+<menuitem name="ItemConfiguration" 
+          verb="Configuration" 
+          label="_Configuration" 
+          pixtype="stock" 
+          pixname="gtk-configuration"/>
+<separator/>
+<menuitem name="ItemStart" 
+          verb="Start" 
+          label="Start" 
+          pixtype="stock" 
+          pixname="gtk-start"/>
+<menuitem name="ItemShutdown" 
+          verb="Shutdown" 
+          label="Shutdown" 
+          pixtype="stock" 
+          pixname="gtk-shutdown"/>
+<separator/>
+</popup>
+

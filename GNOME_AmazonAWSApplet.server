@@ -1,0 +1,24 @@
+<oaf_info>
+
+	<oaf_server iid="OAFIID:GNOME_AmazonAWSApplet_Factory" type="exe" location="/home/joonas/work/amazon.py">
+		<oaf_attribute name="repo_ids" type="stringv">
+			<item value="IDL:Bonobo/GenericFactory:1.0"/>
+			<item value="IDL:Bonobo/Unknown:1.0"/>
+		</oaf_attribute>
+		<oaf_attribute name="name" type="string" value="Amazon EC2 Controller"/>
+		<oaf_attribute name="description" type="string" value="Amazon EC2 Controller"/>
+	</oaf_server>
+
+	<oaf_server iid="OAFIID:GNOME_AmazonAWSApplet" type="factory" location="OAFIID:GNOME_AmazonAWSApplet_Factory">
+		<oaf_attribute name="repo_ids" type="stringv">
+			<item value="IDL:GNOME/Vertigo/PanelAppletShell:1.0"/>
+			<item value="IDL:Bonobo/Control:1.0"/>
+			<item value="IDL:Bonobo/Unknown:1.0"/>
+		</oaf_attribute>
+		<oaf_attribute name="name" type="string" value="Amazon EC2 Controller"/>
+		<oaf_attribute name="description" type="string" value="Amazon EC2 Controller"/>
+		<oaf_attribute name="panel:category" type="string" value="Utility"/>
+		<oaf_attribute name="panel:icon" type="string" value="computer.png"/>
+	</oaf_server>
+
+</oaf_info>
