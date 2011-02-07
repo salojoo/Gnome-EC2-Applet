@@ -5,30 +5,78 @@ pygtk.require('2.0')
 
 import gtk
 import gnomeapplet
+from httplib import HTTPConnection
+from urllib import urlencode, quote
+import config
+import hmac, hashlib
+from base64 import b64encode
+import time
+from xml.dom import minidom
 
-import boto.ec2
+
 
 
 class AmazonEC2Controller:
-    STATE_RUNNING = 0
-    STATE_TO_RUNNING = 1
-    STATE_SHUTDOWN = 2
-    STATE_TO_SHUTDOWN = 3
-    STATE_UNKNOWN = 4
     
+
+    def ec2_query( self, action, params = {}):
+        http = HTTPConnection( self.REGION, timeout = self.timeout )
+        
+        timestamp = time.strftime("%Y-%m-%dT%H:%M:%SZ")
+        params["Action"] = action
+        params["Version"] = "2010-11-15"
+        params["Timestamp"] = timestamp
+        params["SignatureVersion"] = "2"
+        params["SignatureMethod"] = "HmacSHA256"
+        params["AWSAccessKeyId"] = self.AWS_ACCESS_KEY_ID
+        
+        
+        signature = hmac.new( key = self.AWS_SECRET_ACCESS_KEY, digestmod = hashlib.sha256 )
+        signature.update( "GET" + "\n" )
+        signature.update( self.REGION.lower() + "\n" )
+        signature.update( "/\n" )
+        
+        sep = False
+        print "Signing now"
+        for i in sorted( params ):
+            if sep: signature.update("&")
+            else:   sep = True
+            
+            print quote( i ) +  "=" + quote( params[i] )
+            signature.update(quote( i ) + "=" + quote( params[i] ))
+        
+        
+        params["Signature"] = b64encode( signature.digest() )
+        
+        print "Sending request to server " + self.REGION
+        path = "/?" + urlencode(params)
+        print "Path: " + path
+        http.request("GET", path)
+        response = http.getresponse()
+        print "Status: " + str( response.status )
+        if response.status != 200:
+            print response.read()
+            return 0
+        
+        # return xml
+        return minidom.parseString( response.read() )
+        
+        
+        
     
     def replace_icon(self, state):
         self.applet.remove( self.icon )
         
-        if state == self.STATE_RUNNING:
+        if state == "running":
             self.icon = self.icon_running
-        if state == self.STATE_TO_RUNNING:
+        elif state == "pending":
             self.icon = self.icon_to_running
-        if state == self.STATE_SHUTDOWN:
+        elif state == "stopped":
+            print "setting stopped icon"
             self.icon = self.icon_shutdown
-        if state == self.STATE_TO_SHUTDOWN:
+        elif state == "stopping":
             self.icon = self.icon_to_shutdown
-        if state == self.STATE_UNKNOWN:
+        else:
             self.icon = self.icon_unknown
 
         self.applet.add( self.icon )
@@ -37,19 +85,33 @@ class AmazonEC2Controller:
         
     
     def menu_start(self, *arguments):
-        self.replace_icon(self.STATE_TO_RUNNING)
-        self.state = self.STATE_TO_RUNNING
+        self.replace_icon("running")
+        self.state = "running"
         print "menu start"
     
     def menu_shutdown(self, *arguments):
-        self.replace_icon(self.STATE_TO_SHUTDOWN)
-        self.state = self.STATE_TO_SHUTDOWN
+        self.replace_icon("stopping")
+        self.state = "stopping"
         print "menu shutdown"
     
     def menu_configuration(self, *arguments):
         print "menu configure"
         
     
+    def update(self, event = None):
+        params = {  "Filter.1.Name":"reservation-id",
+                    "Filter.1.Value.1":config.RESERVATION_ID}
+        xml = self.ec2_query("DescribeInstances", params )
+
+        # get the status of the first instance in the reservation set
+        instance = xml.getElementsByTagName("instanceState")[0]
+        self.state = instance.getElementsByTagName("name")[0].firstChild.wholeText
+        
+        print "Instance state: " + self.state
+        self.replace_icon( self.state )
+        
+        # continue the timer
+        return 1
     
     def __init__(self, applet, iid):
         print "Initializing the applet"
@@ -65,11 +127,23 @@ class AmazonEC2Controller:
         self.icon_to_shutdown = gtk.Image()
         self.icon_to_shutdown.set_from_file("icon_to_shutdown.png")
         
-        self.state = self.STATE_UNKNOWN # set directly only this one time in initialization
+        self.state = "unknown" # set directly only this one time in initialization
         self.icon = self.icon_unknown
-        self.replace_icon(self.STATE_UNKNOWN)
+        self.replace_icon("unknown")
         
         
+        
+        # settings for EC2 queries
+        self.AWS_ACCESS_KEY_ID = config.AWS_ACCESS_KEY_ID
+        self.AWS_SECRET_ACCESS_KEY = config.AWS_SECRET_ACCESS_KEY
+        self.REGION = config.REGION
+        self.timeout = 5
+        
+        
+        # update now and in future
+        self.update()
+        self.update_interval = 10 * 1000
+        gtk.timeout_add(self.update_interval,self.update, self)
         
         menu = open("menu.xml").read()
         verbs = [("Start", self.menu_start), ("Shutdown", self.menu_shutdown), ("Configuration", self.menu_configuration)]
