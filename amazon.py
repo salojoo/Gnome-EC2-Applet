@@ -37,24 +37,17 @@ class AmazonEC2Controller:
         signature.update( "/\n" )
         
         sep = False
-        print "Signing now"
         for i in sorted( params ):
             if sep: signature.update("&")
             else:   sep = True
-            
-            print quote( i ) +  "=" + quote( params[i] )
             signature.update(quote( i ) + "=" + quote( params[i] ))
-        
-        
         params["Signature"] = b64encode( signature.digest() )
-        
-        print "Sending request to server " + self.REGION
-        path = "/?" + urlencode(params)
-        print "Path: " + path
-        http.request("GET", path)
+
+        http.request("GET", "/?" + urlencode(params))
         response = http.getresponse()
-        print "Status: " + str( response.status )
+        
         if response.status != 200:
+            print "Status: " + str( response.status )
             print response.read()
             return 0
         
@@ -70,12 +63,12 @@ class AmazonEC2Controller:
         if state == "running":
             self.icon = self.icon_running
         elif state == "pending":
-            self.icon = self.icon_to_running
+            self.icon = self.icon_pending
         elif state == "stopped":
             print "setting stopped icon"
-            self.icon = self.icon_shutdown
+            self.icon = self.icon_stopped
         elif state == "stopping":
-            self.icon = self.icon_to_shutdown
+            self.icon = self.icon_stopping
         else:
             self.icon = self.icon_unknown
 
@@ -85,17 +78,38 @@ class AmazonEC2Controller:
         
     
     def menu_start(self, *arguments):
-        self.replace_icon("running")
-        self.state = "running"
-        print "menu start"
+        self.replace_icon("pending")
+        self.state = "pending"
+        
+        for inst in self.get_instances():
+            self.ec2_query("StartInstances", {"InstanceId.1": inst} )
+        
+        
+        
     
     def menu_shutdown(self, *arguments):
         self.replace_icon("stopping")
         self.state = "stopping"
-        print "menu shutdown"
+        
+        for inst in self.get_instances():
+            self.ec2_query("StopInstances", {"InstanceId.1": inst} )
+        
     
     def menu_configuration(self, *arguments):
-        print "menu configure"
+        print "TODO: implement configuration"
+    
+    
+    def get_instances(self):
+        params = {  "Filter.1.Name":"reservation-id",
+                    "Filter.1.Value.1":config.RESERVATION_ID}
+        xml = self.ec2_query("DescribeInstances", params )
+        
+        instances = []
+        for inst in xml.getElementsByTagName("instanceId"):
+            instances += [inst.firstChild.wholeText]
+        
+        return instances
+        
         
     
     def update(self, event = None):
@@ -120,12 +134,12 @@ class AmazonEC2Controller:
         self.icon_unknown.set_from_file("icon_unknown.png")
         self.icon_running = gtk.Image()
         self.icon_running.set_from_file("icon_running.png")
-        self.icon_shutdown = gtk.Image()
-        self.icon_shutdown.set_from_file("icon_shutdown.png")
-        self.icon_to_running = gtk.Image()
-        self.icon_to_running.set_from_file("icon_to_running.png")
-        self.icon_to_shutdown = gtk.Image()
-        self.icon_to_shutdown.set_from_file("icon_to_shutdown.png")
+        self.icon_stopped = gtk.Image()
+        self.icon_stopped.set_from_file("icon_stopped.png")
+        self.icon_pending = gtk.Image()
+        self.icon_pending.set_from_file("icon_pending.png")
+        self.icon_stopping = gtk.Image()
+        self.icon_stopping.set_from_file("icon_stopping.png")
         
         self.state = "unknown" # set directly only this one time in initialization
         self.icon = self.icon_unknown
