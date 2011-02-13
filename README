@@ -1,1 +1,7 @@
-Work going on..
+Shows the status (running, or stopped) of EC2 instances and allows the user to change this status. Can monitor multiple instances.
+
+TODO: elastic-ip support
+TODO: deb package
+TODO: better polling system
+TODO: undo/enter/esc to configuration window
+

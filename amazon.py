@@ -41,8 +41,11 @@ class AmazonEC2Controller:
         # initial state and view
         self.state = "unknown" # set directly only this one time in initialization
         self.icon = self.icon_unknown
-        self.replace_icon("unknown")
-
+        self.replace_icon("unknown", "Initializing")
+        
+        # list of instance names or id's for tooltip
+        self.names = ""
+        
         # init conifg
         self.read_gconf()
         
@@ -96,7 +99,7 @@ class AmazonEC2Controller:
             response = http.getresponse()
         except:
             print "Connection problem"
-            self.replace_icon( "unknown" )
+            self.replace_icon( "unknown", "Connection Problem!\n" +  self.names )
             return False
         
         if response.status != 200:
@@ -110,7 +113,7 @@ class AmazonEC2Controller:
         
         
     
-    def replace_icon(self, state):
+    def replace_icon(self, state, tooltip = None):
         self.applet.remove( self.icon )
         
         if state == "running":
@@ -123,25 +126,36 @@ class AmazonEC2Controller:
             self.icon = self.icon_stopping
         else:
             self.icon = self.icon_unknown
-
+        
+        if tooltip:
+            self.icon.set_tooltip_text(tooltip)
         self.applet.add( self.icon )
         self.applet.show_all()
         
         
     def menu_start(self, *arguments):
-        self.replace_icon("pending")
+        self.replace_icon("pending", self.names)
         self.state = "pending"
         
-        for inst in self.get_instances():
-            self.ec2_query("StartInstances", {"InstanceId.1": inst} )
+        params = {}
+        i = 1
+        for inst in self.instances:
+            params["InstanceId." + str(i)] = inst
+            i += 1
+        self.ec2_query("StartInstances", params )
             
     
     def menu_shutdown(self, *arguments):
-        self.replace_icon("stopping")
+        self.replace_icon("stopping", self.names)
         self.state = "stopping"
         
-        for inst in self.get_instances():
-            self.ec2_query("StopInstances", {"InstanceId.1": inst} )
+        params = {}
+        i = 1
+        for inst in self.instances:
+            params["InstanceId." + str(i)] = inst
+            i += 1
+        
+        self.ec2_query("StopInstances", params )
             
     
     # callback function for handling save and cancel events
@@ -156,7 +170,9 @@ class AmazonEC2Controller:
             self.access_key = self.entry_access_key.get_text()
             self.secret_key = self.entry_secret_key.get_text()
             self.region_address = self.entry_region_address.get_text()
-            self.reservation_id = self.entry_reservation_id.get_text()
+            self.instances = []
+            for inst in self.entry_instances.get_text().split(","):
+                self.instances += [inst.strip()]
             self.write_gconf()
             
             self.window.destroy()
@@ -176,42 +192,53 @@ class AmazonEC2Controller:
         # access key
         label_access_key = gtk.Label("Access key:")
         label_access_key.show()
-        fixed.put( label_access_key, 0, 0 )
+        fixed.put( label_access_key, 0, 5 )
         self.entry_access_key = gtk.Entry()
         self.entry_access_key.set_text( self.access_key )
-        self.entry_access_key.set_width_chars(50)
+        self.entry_access_key.set_width_chars(80)
         self.entry_access_key.show()
-        fixed.put( self.entry_access_key, 150, 0 )
+        fixed.put( self.entry_access_key, 130, 0 )
         
         # secret key
         label_secret_key = gtk.Label("Secret key:")
         label_secret_key.show()
-        fixed.put( label_secret_key, 0, 30 )
+        fixed.put( label_secret_key, 0, 35 )
         self.entry_secret_key = gtk.Entry()
         self.entry_secret_key.set_text( self.secret_key )
-        self.entry_secret_key.set_width_chars(50)
+        self.entry_secret_key.set_width_chars(80)
         self.entry_secret_key.show()
-        fixed.put( self.entry_secret_key, 150, 30 )
+        fixed.put( self.entry_secret_key, 130, 30 )
         
-        # reservation id
-        label_reservation_id = gtk.Label("Reservation id:")
-        label_reservation_id.show()
-        fixed.put( label_reservation_id, 0, 60 )
-        self.entry_reservation_id = gtk.Entry()
-        self.entry_reservation_id.set_text( self.reservation_id )
-        self.entry_reservation_id.set_width_chars(50)
-        self.entry_reservation_id.show()
-        fixed.put( self.entry_reservation_id, 150, 60 )
+        # instances
+        label_instances = gtk.Label("Instances:")
+        label_instances.show()
+        fixed.put( label_instances, 0, 65 )
+        self.entry_instances = gtk.Entry()
+        self.entry_instances.set_text( ",".join(self.instances) )
+        self.entry_instances.set_width_chars(80)
+        self.entry_instances.show()
+        fixed.put( self.entry_instances, 130, 60 )
+        label_instances_info = gtk.Label()
+        label_instances_info.set_markup("<i>Comma separated list of instances with optional ip: i-xxxxxxxx (elastic-ip)</i>")
+        label_instances_info.show()
+        fixed.put( label_instances_info, 130, 90 )
         
         # region addresses
         label_region_address = gtk.Label("Region address:")
         label_region_address.show()
-        fixed.put( label_region_address, 0, 90 )
+        fixed.put( label_region_address, 0, 125 )
         self.entry_region_address = gtk.Entry()
         self.entry_region_address.set_text( self.region_address )
-        self.entry_region_address.set_width_chars(50)
+        self.entry_region_address.set_width_chars(80)
         self.entry_region_address.show()
-        fixed.put( self.entry_region_address, 150, 90 )
+        fixed.put( self.entry_region_address, 130, 120 )
+        label_region_info = gtk.Label()
+        label_region_info.set_markup("""<i>ec2.us-east-1.amazonaws.com
+ec2.us-west-1.amazonaws.com
+ec2.eu-west-1.amazonaws.com
+ec2.ap-southeast-1.amazonaws.com</i>""")
+        label_region_info.show()
+        fixed.put( label_region_info, 130, 150 )
         
         
         
@@ -219,46 +246,76 @@ class AmazonEC2Controller:
         button_cancel = gtk.Button("cancel")
         button_cancel.show()
         button_cancel.connect("clicked", self.menu_callback, "cancel")
-        fixed.put(button_cancel, 0, 120)
+        fixed.put(button_cancel, 0, 240)
         button_save = gtk.Button("save")
         button_save.connect("clicked", self.menu_callback, "save")
         button_save.show()
-        fixed.put(button_save, 150, 120)
+        fixed.put(button_save, 130, 240)
         
         
         # show everything
         fixed.show()
         self.window.show()
-    
-    
-    def get_instances(self):
-        params = {  "Filter.1.Name":"reservation-id",
-                    "Filter.1.Value.1":self.reservation_id }
-        
-        xml = self.ec2_query("DescribeInstances", params )
-        if not xml: return []
-        
-        instances = []
-        for inst in xml.getElementsByTagName("instanceId"):
-            instances += [inst.firstChild.wholeText]
-        
-        return instances
-        
         
     
     def update(self, event = None):
-        params = {  "Filter.1.Name":"reservation-id",
-                    "Filter.1.Value.1":self.reservation_id}
+        params = {}
+        i = 1
+        for inst in self.instances:
+            key = "InstanceId." + str(i)
+            params[key] = inst
+            i += 1
         
         xml = self.ec2_query("DescribeInstances", params )
         if not xml: return 1
+        print xml
 
-        # get the status of the first instance in the reservation set
-        instance = xml.getElementsByTagName("instanceState")[0]
-        self.state = instance.getElementsByTagName("name")[0].firstChild.wholeText
+
+        # generate namelist to use as tooltip
+        self.names = ""
         
+        
+        # the instances are first grouped by reservation id and then instances id
+        # many instances may be in one reservation group
+        states = []
+        
+        for inst_set in xml.getElementsByTagName("instancesSet"):
+            for inst in inst_set.getElementsByTagName("item"):
+                # width-first search of items that are direct children of the instanceset
+                if inst.parentNode != inst_set: continue
+                
+                inst_id = ""
+                inst_name = ""
+                
+                inst_id = inst.getElementsByTagName("instanceId")[0].firstChild.wholeText
+                states += [inst.getElementsByTagName("name")[0].firstChild.wholeText]
+                print "inst_id: " + inst_id
+                tagset = inst.getElementsByTagName("tagSet")
+                
+                # get name of instance, if given in tags
+                inst_name = None
+                if len(tagset) != 0:
+                    for tag in tagset[0].getElementsByTagName("item"):
+                        key = tag.getElementsByTagName("key")[0].firstChild.wholeText
+                        value = tag.getElementsByTagName("value")[0].firstChild.wholeText
+                        if key == "Name": 
+                            inst_name = value
+                            print "inst_name: " + inst_name
+                            break
+                    
+                # add name to if it is defined in tags otherwise add the id
+                # add state of the instance in parantheses
+                if self.names:
+                    self.names = self.names + "\n"
+                if inst_name:
+                    self.names = self.names + inst_name + " (" + states[-1:][0] + ")"
+                else:
+                    self.names = self.names + inst_id + " (" + states[-1:][0] + ")"
+        
+        # state is the state of the first machine
+        self.state = states[0]
         print "Instance state: " + self.state
-        self.replace_icon( self.state )
+        self.replace_icon( self.state, self.names )
         
         # continue the timer
         return 1
@@ -266,11 +323,12 @@ class AmazonEC2Controller:
     def read_gconf(self):
         client = gconf.client_get_default()
         gconf_root_key = self.applet.get_preferences_key()
-        print "gconf key: " + gconf_root_key
         self.access_key = client.get_string( gconf_root_key + "/access_key") or ""
         self.secret_key = client.get_string( gconf_root_key + "/secret_key") or "" 
         self.region_address = client.get_string( gconf_root_key + "/region_address") or ""
-        self.reservation_id = client.get_string( gconf_root_key + "/reservation_id") or ""
+        self.instances = []
+        for inst in (client.get_string( gconf_root_key + "/instances") or "").split(","):
+            self.instances += [inst.strip()]
         
     def write_gconf(self):
         client = gconf.client_get_default()
@@ -278,7 +336,7 @@ class AmazonEC2Controller:
         client.set_string( gconf_root_key + "/access_key", self.access_key)
         client.set_string( gconf_root_key + "/secret_key", self.secret_key)
         client.set_string( gconf_root_key + "/region_address", self.region_address)
-        client.set_string( gconf_root_key + "/reservation_id", self.reservation_id)
+        client.set_string( gconf_root_key + "/instances", ",".join(self.instances))
     
     
     
