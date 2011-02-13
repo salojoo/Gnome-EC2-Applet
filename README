@@ -1,6 +1,18 @@
-Shows the status (running, or stopped) of EC2 instances and allows the user to change this status. Can monitor multiple instances.
+Gnome panel applet for monitoring and controlling Amazons EC2 instances. The apllet shows the state (running, pending, stopping or stopped) of EC2 instances and allows the user to change this state.
 
-If multiple instances are used, the icon shows the status of the first instance and the details of each instance can be seen in the tooltip.
+The applet can use multiple instances. The instances are entered in the i-xxxxx format, which means instances that are already reserved in EC2. The user can save in costs by shutting down the instances when not needed. If multiple instances are used, the icon shows the status of the first instance and the details of each instance can be seen in the tooltip.
+
+The applet may have multiple instances in the panels and each can be configured with separate EC2 instances to monitor and control.
+
+INSTALLATION
+- copy the icon files and menu.xml to /usr/share/gnome-applets/ec2-controller/
+- modify GNOME-AmazonEC2Controller.server to point to amazon.py
+- chmod +x amazon.py 
+- copy the GNOME-AmazonEC2Controller.server to /usr/lib/bonobo/servers/
+
+
+
+
 
 TODO: deb package
 TODO: better polling system with configuration of poll-interval + offline menu option
