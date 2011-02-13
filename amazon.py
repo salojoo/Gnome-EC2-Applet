@@ -52,10 +52,15 @@ class AmazonEC2Controller:
         # timeout for ec2 queries
         self.timeout = 5
         
+        # this flag is set then instances are started
+        # when they reach started state the elastic ips are set
+        self.ip_pending = False
+        
         
         # create right-click-menu
         menu = open(STUFF_ROOT_DIR + "/menu.xml").read()
-        verbs = [("Start", self.menu_start), ("Shutdown", self.menu_shutdown), ("Configuration", self.menu_configuration)]
+        verbs = [("Start", self.menu_start), ("Shutdown", self.menu_shutdown), 
+                 ("Configuration", self.menu_configuration), ("Refresh", self.menu_refresh)]
         applet.setup_menu(menu, verbs, None)
         applet.set_background_widget(applet) # /* enable transparency hack */
         
@@ -133,16 +138,27 @@ class AmazonEC2Controller:
         self.applet.show_all()
         
         
+    # TODO connect and menu.xml
+    def menu_refresh(self, *arguments):
+        self.update()
+        
     def menu_start(self, *arguments):
         self.replace_icon("pending", self.names)
         self.state = "pending"
         
+        
+        
+        # start instances
         params = {}
         i = 1
         for inst in self.instances:
             params["InstanceId." + str(i)] = inst
             i += 1
         self.ec2_query("StartInstances", params )
+        
+        self.ip_pending = True
+        
+        
             
     
     def menu_shutdown(self, *arguments):
@@ -167,13 +183,15 @@ class AmazonEC2Controller:
         elif data == "save":
             # get values from the entryboxes to local variables
             # and save from that to gconf
-            self.access_key = self.entry_access_key.get_text()
-            self.secret_key = self.entry_secret_key.get_text()
-            self.region_address = self.entry_region_address.get_text()
-            self.instances = []
-            for inst in self.entry_instances.get_text().split(","):
-                self.instances += [inst.strip()]
-            self.write_gconf()
+            # TODO input validation
+            access_key = self.entry_access_key.get_text()
+            secret_key = self.entry_secret_key.get_text()
+            region_address = self.entry_region_address.get_text()
+            instances = self.entry_instances.get_text()
+            
+            # write/read cycle with gconf also sets the local variables of this applet class
+            self.write_gconf(access_key, secret_key, region_address, instances)
+            self.read_gconf()
             
             self.window.destroy()
     
@@ -268,7 +286,7 @@ ec2.ap-southeast-1.amazonaws.com</i>""")
         
         xml = self.ec2_query("DescribeInstances", params )
         if not xml: return 1
-        print xml
+        
 
 
         # generate namelist to use as tooltip
@@ -289,7 +307,6 @@ ec2.ap-southeast-1.amazonaws.com</i>""")
                 
                 inst_id = inst.getElementsByTagName("instanceId")[0].firstChild.wholeText
                 states += [inst.getElementsByTagName("name")[0].firstChild.wholeText]
-                print "inst_id: " + inst_id
                 tagset = inst.getElementsByTagName("tagSet")
                 
                 # get name of instance, if given in tags
@@ -300,7 +317,6 @@ ec2.ap-southeast-1.amazonaws.com</i>""")
                         value = tag.getElementsByTagName("value")[0].firstChild.wholeText
                         if key == "Name": 
                             inst_name = value
-                            print "inst_name: " + inst_name
                             break
                     
                 # add name to if it is defined in tags otherwise add the id
@@ -314,7 +330,22 @@ ec2.ap-southeast-1.amazonaws.com</i>""")
         
         # state is the state of the first machine
         self.state = states[0]
-        print "Instance state: " + self.state
+        
+        
+        if self.ip_pending:
+            all_running = True
+            for state in states:
+                if state != "running":
+                    all_running = False
+
+            # associate ip addresses now that the instances all came to running state
+            if all_running:
+                for inst, ip in self.ip.iteritems():
+                    params = {"PublicIp": ip,
+                              "InstanceId": inst}
+                    self.ec2_query("AssociateAddress", params)
+                self.ip_pending = False
+        
         self.replace_icon( self.state, self.names )
         
         # continue the timer
@@ -326,17 +357,26 @@ ec2.ap-southeast-1.amazonaws.com</i>""")
         self.access_key = client.get_string( gconf_root_key + "/access_key") or ""
         self.secret_key = client.get_string( gconf_root_key + "/secret_key") or "" 
         self.region_address = client.get_string( gconf_root_key + "/region_address") or ""
-        self.instances = []
-        for inst in (client.get_string( gconf_root_key + "/instances") or "").split(","):
-            self.instances += [inst.strip()]
         
-    def write_gconf(self):
+        self.instances = []
+        self.ip = {} # ip[instance] = ip
+        for inst in (client.get_string( gconf_root_key + "/instances") or "").split(","):
+            inst = inst.strip()
+            ip_begin = inst.find("(")
+            ip_end = inst.find(")")
+            if ip_begin > 0 and ip_end > 0:
+                self.ip[inst[:ip_begin]] = inst[ip_begin+1:ip_end]
+                self.instances += [inst[:ip_begin]]
+            else:
+                self.instances += [inst]
+        
+    def write_gconf(self, access_key, secret_key, region_address, instances):
         client = gconf.client_get_default()
         gconf_root_key = self.applet.get_preferences_key()
-        client.set_string( gconf_root_key + "/access_key", self.access_key)
-        client.set_string( gconf_root_key + "/secret_key", self.secret_key)
-        client.set_string( gconf_root_key + "/region_address", self.region_address)
-        client.set_string( gconf_root_key + "/instances", ",".join(self.instances))
+        client.set_string( gconf_root_key + "/access_key", access_key)
+        client.set_string( gconf_root_key + "/secret_key", secret_key)
+        client.set_string( gconf_root_key + "/region_address", region_address)
+        client.set_string( gconf_root_key + "/instances", instances)
     
     
     
