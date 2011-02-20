@@ -277,77 +277,82 @@ ec2.ap-southeast-1.amazonaws.com</i>""")
         
     
     def update(self, event = None):
-        params = {}
-        i = 1
-        for inst in self.instances:
-            key = "InstanceId." + str(i)
-            params[key] = inst
-            i += 1
-        
-        xml = self.ec2_query("DescribeInstances", params )
-        if not xml: return 1
-        
+        try:
+            params = {}
+            i = 1
+            for inst in self.instances:
+                key = "InstanceId." + str(i)
+                params[key] = inst
+                i += 1
+            
+            xml = self.ec2_query("DescribeInstances", params )
+            if not xml: return 1
+            
 
 
-        # generate namelist to use as tooltip
-        self.names = ""
-        
-        
-        # the instances are first grouped by reservation id and then instances id
-        # many instances may be in one reservation group
-        states = []
-        
-        for inst_set in xml.getElementsByTagName("instancesSet"):
-            for inst in inst_set.getElementsByTagName("item"):
-                # width-first search of items that are direct children of the instanceset
-                if inst.parentNode != inst_set: continue
-                
-                inst_id = ""
-                inst_name = ""
-                
-                inst_id = inst.getElementsByTagName("instanceId")[0].firstChild.wholeText
-                states += [inst.getElementsByTagName("name")[0].firstChild.wholeText]
-                tagset = inst.getElementsByTagName("tagSet")
-                
-                # get name of instance, if given in tags
-                inst_name = None
-                if len(tagset) != 0:
-                    for tag in tagset[0].getElementsByTagName("item"):
-                        key = tag.getElementsByTagName("key")[0].firstChild.wholeText
-                        value = tag.getElementsByTagName("value")[0].firstChild.wholeText
-                        if key == "Name": 
-                            inst_name = value
-                            break
+            # generate namelist to use as tooltip
+            self.names = ""
+            
+            
+            # the instances are first grouped by reservation id and then instances id
+            # many instances may be in one reservation group
+            states = []
+            
+            for inst_set in xml.getElementsByTagName("instancesSet"):
+                for inst in inst_set.getElementsByTagName("item"):
+                    # width-first search of items that are direct children of the instanceset
+                    if inst.parentNode != inst_set: continue
                     
-                # add name to if it is defined in tags otherwise add the id
-                # add state of the instance in parantheses
-                if self.names:
-                    self.names = self.names + "\n"
-                if inst_name:
-                    self.names = self.names + inst_name + " (" + states[-1:][0] + ")"
-                else:
-                    self.names = self.names + inst_id + " (" + states[-1:][0] + ")"
-        
-        # state is the state of the first machine
-        self.state = states[0]
-        
-        
-        if self.ip_pending:
-            all_running = True
-            for state in states:
-                if state != "running":
-                    all_running = False
+                    inst_id = ""
+                    inst_name = ""
+                    
+                    inst_id = inst.getElementsByTagName("instanceId")[0].firstChild.wholeText
+                    states += [inst.getElementsByTagName("name")[0].firstChild.wholeText]
+                    tagset = inst.getElementsByTagName("tagSet")
+                    
+                    # get name of instance, if given in tags
+                    inst_name = None
+                    if len(tagset) != 0:
+                        for tag in tagset[0].getElementsByTagName("item"):
+                            key = tag.getElementsByTagName("key")[0].firstChild.wholeText
+                            value = tag.getElementsByTagName("value")[0].firstChild.wholeText
+                            if key == "Name": 
+                                inst_name = value
+                                break
+                        
+                    # add name to if it is defined in tags otherwise add the id
+                    # add state of the instance in parantheses
+                    if self.names:
+                        self.names = self.names + "\n"
+                    if inst_name:
+                        self.names = self.names + inst_name + " (" + states[-1:][0] + ")"
+                    else:
+                        self.names = self.names + inst_id + " (" + states[-1:][0] + ")"
+            
+            # state is the state of the first machine
+            self.state = states[0]
+            
+            
+            if self.ip_pending:
+                all_running = True
+                for state in states:
+                    if state != "running":
+                        all_running = False
 
-            # associate ip addresses now that the instances all came to running state
-            if all_running:
-                for inst, ip in self.ip.iteritems():
-                    params = {"PublicIp": ip,
-                              "InstanceId": inst}
-                    self.ec2_query("AssociateAddress", params)
-                self.ip_pending = False
+                # associate ip addresses now that the instances all came to running state
+                if all_running:
+                    for inst, ip in self.ip.iteritems():
+                        params = {"PublicIp": ip,
+                                  "InstanceId": inst}
+                        self.ec2_query("AssociateAddress", params)
+                    self.ip_pending = False
+            
+            self.replace_icon( self.state, self.names )
         
-        self.replace_icon( self.state, self.names )
         
+        except: # continue the timeout loop no-matter-what
+            pass
+            
         # continue the timer
         return 1
         
