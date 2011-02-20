@@ -7,7 +7,6 @@ import gtk
 import gnomeapplet
 from httplib import HTTPConnection
 from urllib import urlencode, quote
-import config
 import hmac, hashlib
 from base64 import b64encode
 import time
@@ -66,8 +65,12 @@ class AmazonEC2Controller:
         
         # update now and in future
         self.update()
-        self.update_interval = 10 * 1000
-        gtk.timeout_add(self.update_interval, self.update, self)
+        self.fast_poll_baseline = time.time()
+        self.fast_poll_timeout = 10 * 1000 #10sec
+        self.slow_poll_timeout = 300 * 1000 #5mins
+        self.fast_poll_timeframe = 180 #3mins of fast polling after any user action or state change
+        self.current_poll_timeout = self.fast_poll_timeout
+        gtk.timeout_add(self.current_poll_timeout, self.update, self)
         
         self.applet.show_all()
 
@@ -140,9 +143,11 @@ class AmazonEC2Controller:
         
     # TODO connect and menu.xml
     def menu_refresh(self, *arguments):
+        self.fast_poll_baseline = time.time()
         self.update()
         
     def menu_start(self, *arguments):
+        self.fast_poll_baseline = time.time()
         self.replace_icon("pending", self.names)
         self.state = "pending"
         
@@ -162,6 +167,7 @@ class AmazonEC2Controller:
             
     
     def menu_shutdown(self, *arguments):
+        self.fast_poll_baseline = time.time()
         self.replace_icon("stopping", self.names)
         self.state = "stopping"
         
@@ -177,6 +183,8 @@ class AmazonEC2Controller:
     # callback function for handling save and cancel events
     # from configuration window
     def menu_callback(self, widget, data):
+        self.fast_poll_baseline = time.time()
+        
         if data == "cancel":
             self.window.destroy()
             
@@ -199,6 +207,8 @@ class AmazonEC2Controller:
     # some of the elements are related to self
     # because they are used in the callback function
     def menu_configuration(self, *arguments):
+        self.fast_poll_baseline = time.time()
+        
         self.window = gtk.Window(gtk.WINDOW_TOPLEVEL)
         self.window.set_title("Amazon EC2 Controller")
         self.window.set_border_width(10)
@@ -330,6 +340,9 @@ ec2.ap-southeast-1.amazonaws.com</i>""")
                         self.names = self.names + inst_id + " (" + states[-1:][0] + ")"
             
             # state is the state of the first machine
+            if self.state != states[0]:
+                self.fast_poll_baseline = time.time()
+            
             self.state = states[0]
             
             
@@ -351,10 +364,37 @@ ec2.ap-southeast-1.amazonaws.com</i>""")
         
         
         except: # continue the timeout loop no-matter-what
-            pass
+            print "Update exception:", sys.exc_info()[0]
+            self.fast_poll_baseline = time.time()
+            self.state = "unknown"
+            tooltip = "Last known state: \n" + self.names
+            self.replace_icon( self.state, tooltip )
             
-        # continue the timer
-        return 1
+        # continue or reset the timer
+        # the timer has two modes: slow-poll and fast-poll
+        
+        if time.time() > self.fast_poll_baseline + self.fast_poll_timeframe:
+            # should use slow-poll timeout
+            
+            if self.current_poll_timeout == self.slow_poll_timeout:
+                return 1
+            elif self.current_poll_timeout == self.fast_poll_timeout:
+                # change to slow-poll timeout
+                print "switching to slow-poll mode"
+                self.current_poll_timeout = self.slow_poll_timeout
+                gtk.timeout_add(self.current_poll_timeout, self.update, self)
+                return 0
+                
+        
+        else:    # should use fast-poll timeout
+            if self.current_poll_timeout == self.slow_poll_timeout:
+                print "switching to fast-poll mode"
+                self.current_poll_timeout = self.fast_poll_timeout
+                gtk.timeout_add(self.current_poll_timeout, self.update, self)
+                return 0
+            elif self.current_poll_timeout == self.fast_poll_timeout:
+                return 1
+            
         
     def read_gconf(self):
         client = gconf.client_get_default()

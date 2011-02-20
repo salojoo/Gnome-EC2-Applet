@@ -20,8 +20,5 @@
           label="Configuration" 
           pixtype="stock" 
           pixname="gtk-configuration"/>
-<separator/>
-
-<separator/>
 </popup>
 
