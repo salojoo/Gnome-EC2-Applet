@@ -64,12 +64,12 @@ class AmazonEC2Controller:
         applet.set_background_widget(applet) # /* enable transparency hack */
         
         # update now and in future
-        self.update()
         self.fast_poll_baseline = time.time()
         self.fast_poll_timeout = 10 * 1000 #10sec
         self.slow_poll_timeout = 300 * 1000 #5mins
         self.fast_poll_timeframe = 180 #3mins of fast polling after any user action or state change
         self.current_poll_timeout = self.fast_poll_timeout
+        self.update()
         gtk.timeout_add(self.current_poll_timeout, self.update, self)
         
         self.applet.show_all()
@@ -287,6 +287,7 @@ ec2.ap-southeast-1.amazonaws.com</i>""")
         
     
     def update(self, event = None):
+    
         try:
             params = {}
             i = 1
@@ -296,8 +297,7 @@ ec2.ap-southeast-1.amazonaws.com</i>""")
                 i += 1
             
             xml = self.ec2_query("DescribeInstances", params )
-            if not xml: return 1
-            
+            if not xml: raise Exception("ec2_query error")
 
 
             # generate namelist to use as tooltip
@@ -364,12 +364,18 @@ ec2.ap-southeast-1.amazonaws.com</i>""")
         
         
         except: # continue the timeout loop no-matter-what
-            print "Update exception:", sys.exc_info()[0]
+            try:
+                # try to also print the message 
+                print "Update exception:", sys.exc_info()[0], sys.exc_info()[1]
+            except:
+                print "Update exception:", sys.exc_info()[0]
+            
+            # set unknown state and reset fast poll baseline to activate fast-polling
             self.fast_poll_baseline = time.time()
             self.state = "unknown"
             tooltip = "Last known state: \n" + self.names
             self.replace_icon( self.state, tooltip )
-            
+        
         # continue or reset the timer
         # the timer has two modes: slow-poll and fast-poll
         
