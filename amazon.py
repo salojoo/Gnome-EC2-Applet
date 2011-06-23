@@ -243,8 +243,14 @@ class AmazonEC2Controller:
         label_instances = gtk.Label("Instances:")
         label_instances.show()
         fixed.put( label_instances, 0, 65 )
+        instances_with_ip = []
+        for inst in self.instances:
+            inst_with_ip = inst
+            if inst in self.ip:
+                inst_with_ip += "(" + self.ip[inst] + ")"
+            instances_with_ip += [inst_with_ip]
         self.entry_instances = gtk.Entry()
-        self.entry_instances.set_text( ",".join(self.instances) )
+        self.entry_instances.set_text( ",".join(instances_with_ip) )
         self.entry_instances.set_width_chars(80)
         self.entry_instances.show()
         fixed.put( self.entry_instances, 130, 60 )
