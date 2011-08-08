@@ -9,7 +9,7 @@ INSTALLATION
 - modify GNOME-AmazonEC2Controller.server to point to amazon.py
 - chmod +x amazon.py 
 - copy the GNOME-AmazonEC2Controller.server to /usr/lib/bonobo/servers/
-
+- you may have to kill and restart the bonobo-activation-server process
 
 
 
