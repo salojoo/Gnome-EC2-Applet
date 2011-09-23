@@ -9,15 +9,20 @@
           label="Shutdown" 
           pixtype="stock" 
           pixname="gtk-shutdown"/>
-<separator/>
 <menuitem name="ItemRefresh" 
           verb="Refresh" 
           label="Refresh" 
           pixtype="stock" 
           pixname="gtk-refresh"/>
+<separator/>
 <menuitem name="ItemConfiguration" 
           verb="Configuration" 
           label="Configuration" 
+          pixtype="stock" 
+          pixname="gtk-configuration"/>
+<menuitem name="ItemPublicDNS" 
+          verb="PublicDNS" 
+          label="Copy Public DNS to clipboard" 
           pixtype="stock" 
           pixname="gtk-configuration"/>
 </popup>

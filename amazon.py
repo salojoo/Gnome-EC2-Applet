@@ -45,6 +45,9 @@ class AmazonEC2Controller:
         # list of instance names or id's for tooltip
         self.names = ""
         
+        # public dns(s)
+        self.public_dns = ""
+        
         # init conifg
         self.read_gconf()
         
@@ -59,7 +62,8 @@ class AmazonEC2Controller:
         # create right-click-menu
         menu = open(STUFF_ROOT_DIR + "/menu.xml").read()
         verbs = [("Start", self.menu_start), ("Shutdown", self.menu_shutdown), 
-                 ("Configuration", self.menu_configuration), ("Refresh", self.menu_refresh)]
+                 ("Configuration", self.menu_configuration), ("Refresh", self.menu_refresh),
+                 ("PublicDNS", self.menu_public_dns)]
         applet.setup_menu(menu, verbs, None)
         applet.set_background_widget(applet) # /* enable transparency hack */
         
@@ -142,7 +146,8 @@ class AmazonEC2Controller:
         self.applet.add( self.icon )
         self.applet.show_all()
         
-        
+
+    
     # TODO connect and menu.xml
     def menu_refresh(self, *arguments):
         self.update()
@@ -165,7 +170,10 @@ class AmazonEC2Controller:
         self.update()
         self.activate_fast_polling()
         
-            
+        
+    def menu_public_dns(self, *arguments):
+        clip = gtk.Clipboard()
+        clip.set_text(self.public_dns)
     
     def menu_shutdown(self, *arguments):
         self.replace_icon("stopping", self.names)
@@ -334,6 +342,11 @@ ec2.ap-southeast-1.amazonaws.com</i>""")
             # many instances may be in one reservation group
             states = []
             
+            # many instances may be in one reservation group
+            # clear now, and set again in loop
+            self.public_dns = ""
+            
+            
             for inst_set in xml.getElementsByTagName("instancesSet"):
                 for inst in inst_set.getElementsByTagName("item"):
                     # width-first search of items that are direct children of the instanceset
@@ -342,6 +355,16 @@ ec2.ap-southeast-1.amazonaws.com</i>""")
                     inst_id = ""
                     inst_name = ""
                     
+                    # reservation id may contain many instances and public dnss
+                    # so print them all separated by newline
+                    try:
+                        if inst.getElementsByTagName("dnsName")[0].firstChild.wholeText:
+                            if self.public_dns:
+                                self.public_dns += "\n"
+                            self.public_dns += inst.getElementsByTagName("dnsName")[0].firstChild.wholeText
+                    except:
+                        pass
+                        
                     inst_id = inst.getElementsByTagName("instanceId")[0].firstChild.wholeText
                     states += [inst.getElementsByTagName("name")[0].firstChild.wholeText]
                     tagset = inst.getElementsByTagName("tagSet")
@@ -370,7 +393,6 @@ ec2.ap-southeast-1.amazonaws.com</i>""")
                 self.activate_fast_polling()
             
             self.state = states[0]
-            
             
             if self.ip_pending:
                 all_running = True
